@@ -9,15 +9,12 @@ organization.name = "NSF-DOE Vera C. Rubin Observatory"
 organization.ror = "https://ror.org/048g3cy84"
 license.id = "CC-BY-4.0"
 
-[technote.status]
-state = "draft"
-
 [[technote.authors]]
-name.given = "Dan C."
-name.family = "Fuchs"
 internal_id = "fuchsds"
 orcid = "https://orcid.org/0009-0007-2454-1951"
+name = {given = "Dan C.", family = "Fuchs"}
 [[technote.authors.affiliations]]
 name = "SLAC National Accelerator Laboratory"
 internal_id = "SLAC"
 address = "Menlo Park"
+ror = "https://ror.org/05gzmn429"
