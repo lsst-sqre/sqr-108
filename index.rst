@@ -193,7 +193,7 @@ See this `Strimzi discussion about the ID mismatch`_, and the `Strimzi docs for 
 #. Resume Strimzi reconciliation by removing the pause annotation::
 
        $ CONTEXT=roundtable-dev \
-         kubectl --context $context --namespace sasquatch \
+         kubectl --context $CONTEXT --namespace sasquatch \
            annotate Kafka sasquatch strimzi.io/pause-reconciliation-
 #. Wait for all resources in the sasquatch app to stabilize
 #. Restart any Kafka-dependent workloads in other namespaces if necessary
