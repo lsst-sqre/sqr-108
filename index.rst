@@ -88,7 +88,7 @@ Take an on-demand backup of the cluster using `Backup for GKE`_.
 Every cluster should have a backup plan with the same name as the cluster.
 Create an on-demand backup using that plan through the web console UI, or by using a command like this:
 
-.. code-block: console
+.. code-block:: console
 
    $ PROJECT_ID=roundtable-dev-abe2 \
        LOCATION=us-central1 \
@@ -137,7 +137,7 @@ Create a restore of the on-demand backup of the cluster using `Backup for GKE`_.
 Every cluster should have a restore plan with the same name as the cluster.
 Create restore using that plan through the web console UI, or by using a command like this:
 
-.. code-block: console
+.. code-block:: console
 
    $ PROJECT_ID=roundtable-dev-abe2 \
      RESTORE_NAME=after-rebuild \
@@ -162,7 +162,7 @@ Regenerate local Kubernetes API creds
 Follow the directions in the `Phalanx environments page`_ for this cluster to regenerate local API credentials so you can run commands with ``kubectl``.
 Something like this:
 
-.. code-block: console
+.. code-block:: console
 
    $ CLUSTER=roundtable-dev \
      PROJECT_ID=roundtable-dev-abe2 \
