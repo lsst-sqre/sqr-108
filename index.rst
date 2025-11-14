@@ -71,7 +71,7 @@ ArgoCD sync state
 
 Make sure that every app in ArgoCD is in sync before starting.
 That way, you can be sure that the ArgoCD state in the backup you're about to take is the actual preferred state of the cluster.
-You can be sure that out of sync in the new restored cluster is because of the restore process.
+You can be sure that resources that are out of sync in the new restored cluster are out of sync because of the restore process.
 
 Terraform plan
 --------------
@@ -192,7 +192,7 @@ Fix cert-manager
 ----------------
 
 `Backup for GKE`_ doesn't restore resources into certain `managed namespaces`_, including ``kube-system``.
-`cert-manager`_ installs some ``Role``s into the ``kube-system`` namespace, so we have to manually sync those roles into the cluster.
+`cert-manager`_ installs some ``Role`` s into the ``kube-system`` namespace, so we have to manually sync those roles into the cluster.
 Do this in ArgoCD by syncing the `cert-manager app`_.
 
 Fix Sasquatch
@@ -235,7 +235,7 @@ Some examples:
 
 * ``Secret`` created by ``VaultSercret``
 * ``Secret`` created by ``GafaelfawrServiceToken``
-* ``Certificate`` created by ``cert-manager``-annotated ``Ingress``.
+* ``Certificate`` created by ``cert-manager``-annotated ``Ingress``
 
 In these cases, it is OK to sync and prune these resources, because they will just get created again.
 
