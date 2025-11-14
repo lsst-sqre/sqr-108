@@ -66,6 +66,20 @@ You should ensure these are also static, and not ephemeral, IP addresses in Goog
 If some external IPs are ephemeral, and not static, in Google Cloud, you will probably have to update a DNS ``A`` record when the new IP gets provisioned.
 You should then add config to the `idf_deploy`_ repo for that IP address and import it into the Terraform state so it doesn't get destroyed next time.
 
+ArgoCD sync state
+------------------
+
+Make sure that every app in ArgoCD is in sync before starting.
+That way, you can be sure that the ArgoCD state in the backup you're about to take is the actual preferred state of the cluster.
+You can be sure that out of sync in the new restored cluster is because of the restore process.
+
+Terraform plan
+--------------
+
+Make sure that the terraform plan for the cluster that you are rebuilding shows no changes.
+That way, you can be sure that the only changes that you make during this process are intentional.
+You don't want to make old changes that were never applied, or revert any manual changes, at the same time as you are doing this cluster restore operation.
+
 Runbook
 =======
 
@@ -130,32 +144,6 @@ Merge the ``idf_deploy`` PR
 This will create a new cluster, including the changes that you made that required destroying and recreating the cluster.
 This will take several minutes
 
-Restore the backup
-------------------
-
-Create a restore of the on-demand backup of the cluster using `Backup for GKE`_.
-Every cluster should have a restore plan with the same name as the cluster.
-Create restore using that plan through the web console UI, or by using a command like this:
-
-.. code-block:: console
-
-   $ PROJECT_ID=roundtable-dev-abe2 \
-     RESTORE_NAME=after-rebuild \
-     LOCATION=us-central1 \
-     RESTORE_PLAN=roundtable-dev \
-     BACKUP_PLAN_ID=roundtable-dev \
-     BACKUP_ID=before-rebuild \
-     gcloud beta container backup-restore restores create $RESTORE_NAME \
-       --project $PROJECT_ID \
-       --location $LOCATION \
-       --restore-plan $RESTORE_PLAN \
-       --backup projects/$PROJECT_ID/locations/$LOCATION/backupPlans/$BACKUP_PLAN_ID/backups/$BACKUP_ID
-
-This will take several minutes.
-You can view the progress of the restore in the Google Cloud web console UI.
-
-When the backup is completely restored, you should be able to access the `Argo CD`_ instance for the new cluster.
-
 Regenerate local Kubernetes API creds
 -------------------------------------
 
@@ -167,6 +155,45 @@ Something like this:
    $ CLUSTER=roundtable-dev \
      PROJECT_ID=roundtable-dev-abe2 \
      gcloud container clusters get-credentials $CLUSTER --project $PROJECT_ID --region us-central
+
+Restore the backup
+------------------
+
+Create a restore of the on-demand backup of the cluster using `Backup for GKE`_.
+Every cluster should have a restore plan with the same name as the cluster.
+Create restore using that plan through the web console UI, or by using a command like this:
+
+.. code-block:: console
+
+   $ echo '{"exclusionFilters": [{"groupKind": {"resourceGroup": "acme.cert-manager.io", "resourceKind": "Order"}}, {"groupKind": {"resourceGroup": "acme.cert-manager.io", "resourceKind": "Challenge"}}, {"groupKind": {"resourceGroup": "cert-manager.io", "resourceKind": "CertificateRequest"}}]}' > /tmp/gke-backup-filter-file.json && \
+     PROJECT_ID=roundtable-dev-abe2 \
+     RESTORE_NAME=after-rebuild \
+     LOCATION=us-central1 \
+     RESTORE_PLAN=roundtable-dev \
+     BACKUP_PLAN_ID=roundtable-dev \
+     BACKUP_ID=before-rebuild \
+     gcloud beta container backup-restore restores create $RESTORE_NAME \
+       --project $PROJECT_ID \
+       --location $LOCATION \
+       --restore-plan $RESTORE_PLAN \
+       --filter-file /tmp/gke-backup-filter-file.json \
+       --backup projects/$PROJECT_ID/locations/$LOCATION/backupPlans/$BACKUP_PLAN_ID/backups/$BACKUP_ID
+
+This will take several minutes.
+You can view the progress of the restore in the Google Cloud web console UI.
+
+We need to explicitly exclude certain namespace-scoped `cert-manager`_ resources (see the `cert-manager backup docs`_ for details).
+Unfortunately, namespace-scoped resources can not be excluded in a restore plan, so we have to exclude them when we're creating the restore itself.
+
+When the backup is completely restored, you should be able to access the `ArgoCD`_ instance for the new cluster.
+
+
+Fix cert-manager
+----------------
+
+`Backup for GKE`_ doesn't restore resources into certain `managed namespaces`_, including ``kube-system``.
+`cert-manager`_ installs some ``Role``s into the ``kube-system`` namespace, so we have to manually sync those roles into the cluster.
+Do this in ArgoCD by syncing the `cert-manager app`_.
 
 Fix Sasquatch
 -------------
@@ -195,12 +222,33 @@ See this `Strimzi discussion about the ID mismatch`_, and the `Strimzi docs for 
        $ CONTEXT=roundtable-dev \
          kubectl --context $CONTEXT --namespace sasquatch \
            annotate Kafka sasquatch strimzi.io/pause-reconciliation-
-#. Wait for all resources in the sasquatch app to stabilize
-#. Restart any Kafka-dependent workloads in other namespaces if necessary
+#. Wait for all resources in the sasquatch app to stabilize.
+   This may take several minutes.
+
+Sync and prune apps in ArgoCD
+-----------------------------
+
+Some apps may show as out of sync in ArgoCD.
+This is usually because certain resources that get restored from the old cluster have invalid references to the custom resources that created them, because those creator resources will have different UIDs in the restored cluster.
+In these cases, the created resources will show up as needing to be deleted in ArgoCD.
+Some examples:
+
+* ``Secret`` created by ``VaultSercret``
+* ``Secret`` created by ``GafaelfawrServiceToken``
+* ``Certificate`` created by ``cert-manager``-annotated ``Ingress``.
+
+In these cases, it is OK to sync and prune these resources, because they will just get created again.
+
+.. warning::
+
+   Be very careful when syncing and pruning apps.
+   Carefully inspect each change and make sure you know that the resources that will get pruned will get recreated by some controller.
+   Make sure you understand these and all other changes that show up in the ArgoCD diffs.
+   If there is something you don't understand, get some help and figure it out before you sync and prune!
 
 
 .. _AWS Route53: https://aws.amazon.com/route53/
-.. _Argo CD: https://argo-cd.readthedocs.io/en/stable/
+.. _ArgoCD: https://argo-cd.readthedocs.io/en/stable/
 .. _Backup for GKE: https://cloud.google.com/kubernetes-engine/docs/add-on/backup-for-gke/concepts/backup-for-gke
 .. _GKE cluster deletion docs: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/deleting-a-cluster
 .. _GKE: https://cloud.google.com/kubernetes-engine
@@ -209,8 +257,12 @@ See this `Strimzi discussion about the ID mismatch`_, and the `Strimzi docs for 
 .. _Strimzi discussion about the ID mismatch: https://github.com/orgs/strimzi/discussions/10082
 .. _Strimzi docs for pausing reconciliation: https://strimzi.io/docs/operators/latest/full/deploying#proc-pausing-reconciliation-str
 .. _Strimzi: https://strimzi.io/
+.. _cert-manager app: https://phalanx.lsst.io/applications/cert-manager/index.html
+.. _cert-manager backup docs: https://cert-manager.io/docs/devops-tips/backup
+.. _cert-manager: https://cert-manager.io/
 .. _enabling GKE Dataplan V2: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2
 .. _ephemeral IP address: https://cloud.google.com/vpc/docs/ip-addresses#ephemeral_and_static_ip_addresses
 .. _idf_deploy: https://github.com/lsst/idf_deploy
 .. _ingress-nginx: https://github.com/kubernetes/ingress-nginx
+.. _managed namespaces: https://cloud.google.com/kubernetes-engine/docs/add-on/backup-for-gke/how-to/restore-plan#managed-namespaces
 .. _on-demand backup docs: https://cloud.google.com/kubernetes-engine/docs/add-on/backup-for-gke/how-to/backup
